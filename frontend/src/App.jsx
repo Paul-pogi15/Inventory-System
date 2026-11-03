@@ -55,7 +55,7 @@ async function request(path, options) {
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error(
-        "The inventory server is unavailable. Start MySQL in XAMPP, then run npm.cmd run dev in the backend folder and refresh this page.",
+        "The inventory server is unavailable. Run npm.cmd run dev in the backend folder and refresh this page.",
         { cause: error }
       );
     }

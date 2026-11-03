@@ -1,25 +1,11 @@
 const express = require("express");
 const cors = require("cors");
-const mysql = require("mysql2/promise");
+const { DatabaseSync } = require("node:sqlite");
+const path = require("node:path");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
-const DB_NAME = process.env.DB_NAME || "inventory_system";
-
-if (!/^[a-zA-Z0-9_]+$/.test(DB_NAME)) {
-  throw new Error("DB_NAME may contain only letters, numbers, and underscores.");
-}
-
-const DB_CONFIG = {
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: DB_NAME,
-  port: Number(process.env.DB_PORT) || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-};
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, "inventory.db");
 const MAX_DB_QUANTITY = 2147483647;
 const MAX_PRODUCT_PRICE = 99999999.99;
 const UNITS = ["pcs", "boxes", "dozen", "pairs", "packs", "sets", "bottles", "kg", "L", "other"];
@@ -30,93 +16,75 @@ app.use(express.json({ limit: "1mb" }));
 let db;
 
 async function initDatabase() {
-  const connection = await mysql.createConnection({
-    host: DB_CONFIG.host,
-    user: DB_CONFIG.user,
-    password: DB_CONFIG.password,
-    port: DB_CONFIG.port,
-  });
-
-  await connection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\``);
-  await connection.end();
-
-  db = mysql.createPool(DB_CONFIG);
-  await db.query(`
+  const sqlite = new DatabaseSync(DB_PATH);
+  const execute = async (sql, params = []) => {
+    const statement = sqlite.prepare(sql);
+    if (/^\s*(SELECT|PRAGMA|WITH)\b/i.test(sql)) {
+      return [statement.all(...params)];
+    }
+    const result = statement.run(...params);
+    return [{
+      insertId: Number(result.lastInsertRowid || 0),
+      affectedRows: Number(result.changes || 0),
+    }];
+  };
+  db = {
+    exec: (sql) => sqlite.exec(sql),
+    prepare: (sql) => sqlite.prepare(sql),
+    execute,
+    query: execute,
+    getConnection: async () => ({
+      execute,
+      beginTransaction: async () => sqlite.exec("BEGIN"),
+      commit: async () => sqlite.exec("COMMIT"),
+      rollback: async () => sqlite.exec("ROLLBACK"),
+      release: () => {},
+    }),
+  };
+  db.exec(`
     CREATE TABLE IF NOT EXISTS products (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      category VARCHAR(255) NOT NULL,
-      price DECIMAL(10,2) NOT NULL,
-      unit VARCHAR(20) NOT NULL DEFAULT 'pcs',
-      quantity DECIMAL(13,3) NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      price REAL NOT NULL,
+      unit TEXT NOT NULL DEFAULT 'pcs',
+      quantity REAL NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  await db.query(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS stock_history (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      productId INT NOT NULL,
-      productName VARCHAR(255) NOT NULL,
-      type VARCHAR(50) NOT NULL,
-      quantity DECIMAL(13,3) NOT NULL,
-      unit VARCHAR(20) NOT NULL DEFAULT 'pcs',
-      date VARCHAR(255) NOT NULL
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      productId INTEGER NOT NULL,
+      productName TEXT NOT NULL,
+      type TEXT NOT NULL,
+      quantity REAL NOT NULL,
+      unit TEXT NOT NULL DEFAULT 'pcs',
+      date TEXT NOT NULL
     )
   `);
 
-  const [productColumns] = await db.execute(
-    "SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
-    [DB_NAME, "products"]
-  );
-  const productColumnNames = new Set(productColumns.map((column) => column.COLUMN_NAME));
+  const productColumns = db.prepare("PRAGMA table_info(products)").all();
+  const productColumnNames = new Set(productColumns.map((column) => column.name));
   if (!productColumnNames.has("unit")) {
-    await db.query("ALTER TABLE products ADD COLUMN unit VARCHAR(20) NOT NULL DEFAULT 'pcs' AFTER price");
-  }
-  const productQuantityColumn = productColumns.find((column) => column.COLUMN_NAME === "quantity");
-  if (
-    productQuantityColumn.DATA_TYPE !== "decimal" ||
-    Number(productQuantityColumn.NUMERIC_PRECISION) !== 13 ||
-    Number(productQuantityColumn.NUMERIC_SCALE) !== 3
-  ) {
-    await db.query("ALTER TABLE products MODIFY quantity DECIMAL(13,3) NOT NULL");
+    db.exec("ALTER TABLE products ADD COLUMN unit TEXT NOT NULL DEFAULT 'pcs'");
   }
 
-  const [historyColumns] = await db.execute(
-    "SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
-    [DB_NAME, "stock_history"]
-  );
-  const historyColumnNames = new Set(historyColumns.map((column) => column.COLUMN_NAME));
+  const historyColumns = db.prepare("PRAGMA table_info(stock_history)").all();
+  const historyColumnNames = new Set(historyColumns.map((column) => column.name));
   const historyUnitAdded = !historyColumnNames.has("unit");
   if (historyUnitAdded) {
-    await db.query("ALTER TABLE stock_history ADD COLUMN unit VARCHAR(20) NOT NULL DEFAULT 'pcs' AFTER quantity");
-  }
-  const historyQuantityColumn = historyColumns.find((column) => column.COLUMN_NAME === "quantity");
-  if (
-    historyQuantityColumn.DATA_TYPE !== "decimal" ||
-    Number(historyQuantityColumn.NUMERIC_PRECISION) !== 13 ||
-    Number(historyQuantityColumn.NUMERIC_SCALE) !== 3
-  ) {
-    await db.query("ALTER TABLE stock_history MODIFY quantity DECIMAL(13,3) NOT NULL");
-  }
-  if (historyUnitAdded) {
-    await db.query(`
-      UPDATE stock_history AS history
-      INNER JOIN products AS product ON product.id = history.productId
-      SET history.unit = product.unit
+    db.exec("ALTER TABLE stock_history ADD COLUMN unit TEXT NOT NULL DEFAULT 'pcs'");
+    db.exec(`
+      UPDATE stock_history
+      SET unit = COALESCE(
+        (SELECT products.unit FROM products WHERE products.id = stock_history.productId),
+        'pcs'
+      )
     `);
   }
 
-  const [tableEngines] = await db.execute(
-    "SELECT TABLE_NAME, ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ('products', 'stock_history')",
-    [DB_NAME]
-  );
-  for (const table of tableEngines) {
-    if (table.ENGINE !== "InnoDB") {
-      await db.query(`ALTER TABLE \`${table.TABLE_NAME}\` ENGINE=InnoDB`);
-    }
-  }
-
-  console.log(`Connected to MySQL database: ${DB_NAME}`);
+  console.log(`Using SQLite database: ${DB_PATH}`);
 }
 
 function validProductId(value) {
@@ -287,7 +255,7 @@ async function recordStockChange(req, res, type) {
     await connection.beginTransaction();
     transactionStarted = true;
     const [rows] = await connection.execute(
-      "SELECT * FROM products WHERE id = ? FOR UPDATE",
+      "SELECT * FROM products WHERE id = ?",
       [initialTransaction.productId]
     );
     if (rows.length === 0) {
@@ -399,7 +367,7 @@ async function startServer() {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    reportError("MySQL connection failed", error);
+    reportError("SQLite database initialization failed", error);
     process.exit(1);
   }
 }
