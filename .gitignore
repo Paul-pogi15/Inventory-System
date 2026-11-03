@@ -6,3 +6,5 @@ frontend/dist/
 !**/.env.example
 *.log
 backend/inventory.db
+backend/inventory-data.json
+backend/inventory-data.json.tmp
