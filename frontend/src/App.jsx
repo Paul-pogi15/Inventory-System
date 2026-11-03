@@ -219,7 +219,7 @@ function App() {
       setProducts(Array.isArray(data) ? data.map(normalizeProduct) : []);
       setErrors((current) => ({ ...current, products: "" }));
     } catch (error) {
-      setErrors((current) => ({ ...current, products: error.message }));
+      console.error("Failed to load products.", error);
     } finally {
       setLoading((current) => ({ ...current, products: false }));
     }
@@ -232,7 +232,7 @@ function App() {
       setHistory(Array.isArray(data) ? data : []);
       setErrors((current) => ({ ...current, history: "" }));
     } catch (error) {
-      setErrors((current) => ({ ...current, history: error.message }));
+      console.error("Failed to load stock history.", error);
     } finally {
       setLoading((current) => ({ ...current, history: false }));
     }
