@@ -55,7 +55,7 @@ async function request(path, options) {
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error(
-        "The inventory server is unavailable. Please try again in a moment.",
+        "Unable to complete the request. Please try again.",
         { cause: error }
       );
     }
