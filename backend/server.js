@@ -11,6 +11,7 @@ const DATA_PATH = process.env.DATA_PATH || (
     ? path.join("/tmp", "inventory-data.json")
     : path.join(__dirname, "..", "server", "Database", "inventory-data.json")
 );
+const INITIAL_DATA_PATH = path.join(__dirname, "..", "server", "Database", "inventory-data.json");
 const FRONTEND_DIST_PATH = path.join(__dirname, "..", "frontend", "dist");
 const MAX_QUANTITY = 2147483647;
 const MAX_PRODUCT_PRICE = 99999999.99;
@@ -22,6 +23,10 @@ app.use(express.json({ limit: "1mb" }));
 const storage = createStorage(DATA_PATH);
 
 function initializeStorage() {
+  fs.mkdirSync(path.dirname(DATA_PATH), { recursive: true });
+  if (process.env.VERCEL && !fs.existsSync(DATA_PATH) && fs.existsSync(INITIAL_DATA_PATH)) {
+    fs.copyFileSync(INITIAL_DATA_PATH, DATA_PATH);
+  }
   storage.initialize();
   console.log(`Using local inventory data file: ${DATA_PATH}`);
 }
