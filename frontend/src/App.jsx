@@ -62,6 +62,11 @@ async function request(path, options) {
     throw error;
   }
   const data = await response.json().catch(() => ({}));
+  if (response.status === 404 && path.startsWith("/")) {
+    throw new Error(
+      "The inventory API is not deployed. Set Vercel Root Directory to the repository root and redeploy."
+    );
+  }
   if (!response.ok) throw new Error(data.message || "The request could not be completed.");
   return data;
 }
