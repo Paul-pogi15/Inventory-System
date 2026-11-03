@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-const API = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "")}/api`;
+const API = `${(import.meta.env.VITE_API_URL || "").replace(/\/$/, "")}/api`;
 const CATEGORIES = ["Shoes", "Clothes", "Bags", "Drinks", "Electronics", "Accessories", "Other"];
 const UNITS = [
   ["pcs", "Pieces (pcs)"], ["boxes", "Boxes (boxes)"], ["dozen", "Dozens (dozen)"],
@@ -55,7 +55,7 @@ async function request(path, options) {
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error(
-        "The inventory server is unavailable. Run npm.cmd run dev in the backend folder and refresh this page.",
+        "The inventory server is unavailable. Please try again in a moment.",
         { cause: error }
       );
     }

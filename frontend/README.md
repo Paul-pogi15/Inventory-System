@@ -2,6 +2,14 @@
 
 React and Vite frontend for the Express and SQLite inventory API.
 
+For production, build and start the project from the repository root. The backend serves the compiled frontend and API together, so users only need to open one URL:
+
+```powershell
+npm.cmd install
+npm.cmd run build
+npm.cmd start
+```
+
 ## Run locally in VS Code (Windows PowerShell)
 
 1. Open a terminal in the backend directory:
@@ -22,7 +30,7 @@ React and Vite frontend for the Express and SQLite inventory API.
 
    Open the local URL printed by Vite (normally `http://localhost:5173`).
 
-The frontend uses `http://localhost:5000/api` by default. To use a different backend origin, create `frontend\.env.local` with:
+The frontend uses the same origin as the backend by default. To use a separately hosted backend, create `frontend\.env.local` with:
 
 ```text
 VITE_API_URL=http://localhost:5000

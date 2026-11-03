@@ -2,10 +2,12 @@ const express = require("express");
 const cors = require("cors");
 const { DatabaseSync } = require("node:sqlite");
 const path = require("node:path");
+const fs = require("node:fs");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "inventory.db");
+const FRONTEND_DIST_PATH = path.join(__dirname, "..", "frontend", "dist");
 const MAX_DB_QUANTITY = 2147483647;
 const MAX_PRODUCT_PRICE = 99999999.99;
 const UNITS = ["pcs", "boxes", "dozen", "pairs", "packs", "sets", "bottles", "kg", "L", "other"];
@@ -354,6 +356,21 @@ app.get("/api/dashboard", async (req, res) => {
     reportError("Failed to load dashboard", error);
     res.status(500).json({ message: "Failed to load dashboard." });
   }
+});
+
+if (fs.existsSync(FRONTEND_DIST_PATH)) {
+  app.use(express.static(FRONTEND_DIST_PATH));
+}
+
+app.use((req, res, next) => {
+  if (
+    req.method !== "GET" ||
+    req.path.startsWith("/api/") ||
+    !fs.existsSync(path.join(FRONTEND_DIST_PATH, "index.html"))
+  ) {
+    return next();
+  }
+  return res.sendFile(path.join(FRONTEND_DIST_PATH, "index.html"));
 });
 
 app.get("/", (req, res) => {
