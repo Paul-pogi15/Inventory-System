@@ -19,7 +19,7 @@ npm.cmd start
    npm.cmd run dev
    ```
 
-   The backend creates and uses the local `backend\inventory-data.json` file automatically. Set `DATA_PATH` to use a different data file or `PORT` to override the default port.
+   The backend creates and uses the local `server\Database\inventory-data.json` file automatically. Set `DATA_PATH` to use a different data file or `PORT` to override the default port.
 
 2. In a second VS Code terminal, start the frontend:
 

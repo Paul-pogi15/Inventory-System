@@ -9,7 +9,7 @@ const PORT = Number(process.env.PORT) || 5000;
 const DATA_PATH = process.env.DATA_PATH || (
   process.env.VERCEL
     ? path.join("/tmp", "inventory-data.json")
-    : path.join(__dirname, "inventory-data.json")
+    : path.join(__dirname, "..", "server", "Database", "inventory-data.json")
 );
 const FRONTEND_DIST_PATH = path.join(__dirname, "..", "frontend", "dist");
 const MAX_QUANTITY = 2147483647;
