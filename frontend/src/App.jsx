@@ -261,7 +261,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(product),
       });
-      await loadProducts();
+      await refreshAll();
       notify(id ? "Product updated successfully." : "Product added successfully.");
       setModal(null);
       if (!id) navigate("products");

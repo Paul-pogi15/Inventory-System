@@ -50,6 +50,17 @@ function createStorage(filePath) {
         created_at: new Date().toISOString(),
       };
       data.products.push(product);
+      if (product.quantity > 0) {
+        data.stockHistory.push({
+          id: data.nextHistoryId++,
+          productId: product.id,
+          productName: product.name,
+          type: "Stock In",
+          quantity: product.quantity,
+          unit: product.unit,
+          date: product.created_at,
+        });
+      }
       save();
       return clone(product);
     },
