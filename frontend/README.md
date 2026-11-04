@@ -19,7 +19,7 @@ npm.cmd start
    npm.cmd run dev
    ```
 
-   The backend creates and uses the local `server\Database\inventory-data.json` file automatically. Set `DATA_PATH` to use a different data file or `PORT` to override the default port.
+   The backend creates and uses the local `server\Database\inventory-data.json` file automatically. Set `DATA_PATH` to use a different data file or `PORT` to override the default port. Vercel deployments must configure `POSTGRES_URL` (from Vercel Postgres/Neon); serverless `/tmp` storage is not used.
 
 2. In a second VS Code terminal, start the frontend:
 
@@ -35,6 +35,10 @@ The frontend uses the same origin as the backend by default. To use a separately
 ```text
 VITE_API_URL=http://localhost:5000
 ```
+
+When built for production, a localhost value is ignored so a deployed frontend
+continues to call its deployed `/api` route instead of depending on a local
+backend process.
 
 ## Available frontend checks
 

@@ -1,16 +1,6 @@
 {
-  "nextProductId": 2,
+  "nextProductId": 1,
   "nextHistoryId": 1,
-  "products": [
-    {
-      "id": 1,
-      "name": "Puma",
-      "category": "Shoes",
-      "price": 10000,
-      "quantity": 1,
-      "unit": "boxes",
-      "created_at": "2026-11-03T13:40:21.505Z"
-    }
-  ],
+  "products": [],
   "stockHistory": []
 }

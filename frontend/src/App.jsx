@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-const API = `${(import.meta.env.VITE_API_URL || "").replace(/\/$/, "")}/api`;
+const configuredApiUrl = (import.meta.env.VITE_API_URL || "").trim();
+const localApiUrl = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(configuredApiUrl);
+const apiBaseUrl = import.meta.env.PROD && localApiUrl ? "" : configuredApiUrl;
+const API = `${apiBaseUrl.replace(/\/$/, "")}/api`;
 const CATEGORIES = ["Shoes", "Clothes", "Bags", "Drinks", "Electronics", "Accessories", "Other"];
 const UNITS = [
   ["pcs", "Pieces (pcs)"], ["boxes", "Boxes (boxes)"], ["dozen", "Dozens (dozen)"],
@@ -256,12 +259,15 @@ function App() {
     if (saving) return false;
     setSaving(true);
     try {
-      await request(id ? `/products/${id}` : "/products", {
+      const savedProduct = normalizeProduct(await request(id ? `/products/${id}` : "/products", {
         method: id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(product),
-      });
-      await refreshAll();
+      }));
+      setProducts((current) => id
+        ? current.map((item) => item.id === savedProduct.id ? savedProduct : item)
+        : [savedProduct, ...current]);
+      await loadHistory();
       notify(id ? "Product updated successfully." : "Product added successfully.");
       setModal(null);
       if (!id) navigate("products");
@@ -316,12 +322,13 @@ function App() {
     if (saving) return;
     setSaving(true);
     try {
-      await request(`/stock-${type}`, {
+      const updatedProduct = normalizeProduct(await request(`/stock-${type}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId: product.id, quantity: amount }),
-      });
-      await refreshAll();
+      }));
+      setProducts((current) => current.map((item) => item.id === updatedProduct.id ? updatedProduct : item));
+      await loadHistory();
       setStockQuantity("");
       setSelectedProduct("");
       setModal(null);

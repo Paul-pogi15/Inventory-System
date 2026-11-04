@@ -3,14 +3,11 @@ const cors = require("cors");
 const path = require("node:path");
 const fs = require("node:fs");
 const { createStorage } = require("./storage");
+const { createPostgresStorage } = require("./postgres-storage");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
-const DATA_PATH = process.env.DATA_PATH || (
-  process.env.VERCEL
-    ? path.join("/tmp", "inventory-data.json")
-    : path.join(__dirname, "..", "server", "Database", "inventory-data.json")
-);
+const DATA_PATH = process.env.DATA_PATH || path.join(__dirname, "..", "server", "Database", "inventory-data.json");
 const INITIAL_DATA_PATH = path.join(__dirname, "..", "server", "Database", "inventory-data.json");
 const FRONTEND_DIST_PATH = path.join(__dirname, "..", "frontend", "dist");
 const MAX_QUANTITY = 2147483647;
@@ -20,16 +17,36 @@ const UNITS = ["pcs", "boxes", "dozen", "pairs", "packs", "sets", "bottles", "kg
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-const storage = createStorage(DATA_PATH);
+const usingPostgres = Boolean(process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING);
+const storage = usingPostgres
+  ? createPostgresStorage()
+  : createStorage(DATA_PATH);
 
-function initializeStorage() {
-  fs.mkdirSync(path.dirname(DATA_PATH), { recursive: true });
-  if (process.env.VERCEL && !fs.existsSync(DATA_PATH) && fs.existsSync(INITIAL_DATA_PATH)) {
-    fs.copyFileSync(INITIAL_DATA_PATH, DATA_PATH);
+async function initializeStorage() {
+  if (usingPostgres) {
+    let seedData = {};
+    if (fs.existsSync(INITIAL_DATA_PATH)) {
+      seedData = JSON.parse(fs.readFileSync(INITIAL_DATA_PATH, "utf8"));
+    }
+    await storage.initialize(seedData);
+    console.log("Using configured PostgreSQL inventory storage.");
+    return;
   }
+  fs.mkdirSync(path.dirname(DATA_PATH), { recursive: true });
   storage.initialize();
   console.log(`Using local inventory data file: ${DATA_PATH}`);
 }
+
+const storageReady = initializeStorage();
+app.use(async (req, res, next) => {
+  try {
+    await storageReady;
+    next();
+  } catch (error) {
+    reportError("Inventory storage initialization failed", error);
+    res.status(500).json({ message: "Inventory storage is unavailable." });
+  }
+});
 
 function validProductId(value) {
   if (typeof value !== "string" && typeof value !== "number") {
@@ -111,7 +128,7 @@ function reportError(label, error) {
 
 app.get("/api/products", async (req, res) => {
   try {
-    res.json(storage.listProducts());
+    res.json(await storage.listProducts());
   } catch (error) {
     reportError("Failed to load products", error);
     res.status(500).json({ message: "Failed to load products." });
@@ -125,7 +142,7 @@ app.post("/api/products", async (req, res) => {
   }
 
   try {
-    res.status(201).json(storage.addProduct(product));
+    res.status(201).json(await storage.addProduct(product));
   } catch (error) {
     reportError("Failed to add product", error);
     res.status(500).json({ message: "Failed to add product." });
@@ -139,7 +156,7 @@ app.put("/api/products/:id", async (req, res) => {
   }
 
   try {
-    const existing = storage.getProduct(id);
+    const existing = await storage.getProduct(id);
     if (!existing) {
       return res.status(404).json({ message: "Product not found." });
     }
@@ -150,7 +167,7 @@ app.put("/api/products/:id", async (req, res) => {
     if (product.unit !== existing.unit && Number(existing.quantity) > 0) {
       return res.status(400).json({ message: "The unit cannot be changed while this product has stock. Remove or use the current stock first." });
     }
-    res.json(storage.updateProduct(id, product));
+    res.json(await storage.updateProduct(id, product));
   } catch (error) {
     reportError("Failed to update product", error);
     res.status(500).json({ message: "Failed to update product." });
@@ -164,7 +181,7 @@ app.delete("/api/products/:id", async (req, res) => {
   }
 
   try {
-    if (!storage.deleteProduct(id)) {
+    if (!await storage.deleteProduct(id)) {
       return res.status(404).json({ message: "Product not found." });
     }
     res.json({ message: "Product deleted." });
@@ -181,7 +198,7 @@ async function recordStockChange(req, res, type) {
   }
 
   try {
-    const product = storage.getProduct(initialTransaction.productId);
+    const product = await storage.getProduct(initialTransaction.productId);
     if (!product) {
       return res.status(404).json({ message: "Product not found." });
     }
@@ -202,7 +219,7 @@ async function recordStockChange(req, res, type) {
       return res.status(400).json({ message: "The resulting stock quantity is too large." });
     }
 
-    res.json(storage.changeStock(transaction.productId, type, transaction.quantity));
+    res.json(await storage.changeStock(transaction.productId, type, transaction.quantity));
   } catch (error) {
     reportError(`Failed to record ${type.toLowerCase()}`, error);
     res.status(500).json({ message: `Failed to record ${type.toLowerCase()}.` });
@@ -214,7 +231,7 @@ app.post("/api/stock-out", (req, res) => recordStockChange(req, res, "Stock Out"
 
 app.get("/api/stock-history", async (req, res) => {
   try {
-    res.json(storage.listHistory());
+    res.json(await storage.listHistory());
   } catch (error) {
     reportError("Failed to load stock history", error);
     res.status(500).json({ message: "Failed to load stock history." });
@@ -223,7 +240,7 @@ app.get("/api/stock-history", async (req, res) => {
 
 app.get("/api/dashboard", async (req, res) => {
   try {
-    res.json(storage.dashboard());
+    res.json(await storage.dashboard());
   } catch (error) {
     reportError("Failed to load dashboard", error);
     res.status(500).json({ message: "Failed to load dashboard." });
@@ -251,7 +268,6 @@ app.get("/", (req, res) => {
 
 function startServer() {
   try {
-    initializeStorage();
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
