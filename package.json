@@ -7,7 +7,7 @@
     "frontend"
   ],
   "scripts": {
-    "build": "npm run build --workspace frontend",
+    "build": "node scripts/build-frontend.js",
     "start": "npm run start --workspace backend"
   },
   "engines": {
